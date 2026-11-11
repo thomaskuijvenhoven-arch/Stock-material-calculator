@@ -1,29 +1,43 @@
 import streamlit as st
 import numpy as np
+import fitz  # PyMuPDF voor het omzetten van PDF naar afbeelding
 
-# Pagina ingesteld op 'wide' zodat foto's en tekeningen groot getoond worden
+# Pagina ingesteld op 'wide' zodat de tekening groot getoond wordt
 st.set_page_config(page_title="CNC Materiaal Calculator", page_icon="⚙️", layout="wide")
 
 st.title("⚙️ CNC Uitgangsmateriaal & Klem-Calculator")
-st.write("Sleep een 2D-tekening (PDF/afbeelding) hierheen of maak direct een foto met je telefoon.")
+st.write("Sleep een 2D-tekening (PDF of afbeelding) hierheen of maak direct een foto met je telefoon.")
 
-# We verdelen het scherm nu in twee kolommen: links de afbeelding, rechts de invoer en berekening
-col_links, col_rechts = st.columns([1.2, 1])
+col_links, col_rechts = st.columns([1.3, 1])
 
 with col_links:
-    st.subheader("📂 Tekening / Foto")
-    uploaded_file = st.file_uploader("Sleep hier een afbeelding (PNG/JPG) of PDF", type=["pdf", "png", "jpg", "jpeg"])
-    camera_foto = st.camera_input("📸 Of maak een foto met de camera")
+    st.subheader("📂 Geüploade Tekening / PDF")
+    uploaded_file = st.file_uploader("Sleep hier een PDF, PNG of JPG", type=["pdf", "png", "jpg", "jpeg"])
+    camera_foto = st.camera_input("📸 Of maak een foto met de camera (voor op de telefoon)")
 
-    actief_bestand = uploaded_file if uploaded_file is not None else camera_foto
-
-    if actief_bestand is not None:
-        if hasattr(actief_bestand, "name") and actief_bestand.name.lower().endswith(('.png', '.jpg', '.jpeg')):
-            st.image(actief_bestand, caption="Geüploade Tekening", use_container_width=True)
-        elif camera_foto is not None:
-            st.image(camera_foto, caption="Gemaakte Foto", use_container_width=True)
-        else:
-            st.info(f"PDF-bestand '{uploaded_file.name}' succesvol geladen.")
+    if uploaded_file is not None:
+        # Als het een PDF is, converteren we de eerste pagina naar een afbeelding zodat je hem groot ziet
+        if uploaded_file.name.lower().endswith('.pdf'):
+            try:
+                # Lees de bytes van de PDF
+                bytes_data = uploaded_file.read()
+                doc = fitz.open(stream=bytes_data, filetype="pdf")
+                page = doc[0]  # Pak de eerste pagina van de tekening
+                pix = page.get_pixmap(dpi=150) # Hoge resolutie voor scherpte
+                img_bytes = pix.tobytes("png")
+                
+                # Toon de PDF-pagina groot op het scherm
+                st.image(img_bytes, caption=f"PDF Tekening: {uploaded_file.name}", use_container_width=True)
+            except Exception as e:
+                st.error(f"Kon de PDF niet omzetten naar beeld: {e}")
+                
+        # Als het al een afbeelding is (PNG/JPG)
+        elif uploaded_file.name.lower().endswith(('.png', '.jpg', '.jpeg')):
+            st.image(uploaded_file, caption=f"Afbeelding: {uploaded_file.name}", use_container_width=True)
+            
+    elif camera_foto is not None:
+        # Als er via de telefoon een camerafoto is gemaakt
+        st.image(camera_foto, caption="Gemaakte Foto", use_container_width=True)
 
 with col_rechts:
     st.subheader("1. Netto Productmaten")
@@ -41,7 +55,7 @@ with col_rechts:
 
 st.markdown("---")
 
-# Berekeningsknop gecentreerd of onderaan
+# Berekeningsknop
 if st.button("🚀 Bereken Uitgangsmateriaal", type="primary"):
     bruto_l = netto_l + (2 * omtrek_xy)
     bruto_b = netto_b + (2 * omtrek_xy)
