@@ -4,16 +4,23 @@ import numpy as np
 st.set_page_config(page_title="CNC Materiaal Calculator", page_icon="⚙️", layout="centered")
 
 st.title("⚙️ CNC Uitgangsmateriaal & Klem-Calculator")
-st.write("Sleep een 2D-tekening (PDF of afbeelding) hierheen of maak direct een foto met je telefoon.")
+st.write("Sleep een 2D-tekening (PDF/afbeelding) hierheen of maak direct een foto met je telefoon.")
 
-# Bestand uploaden of foto maken
-uploaded_file = st.file_uploader("📂 Sleep hier een PDF of afbeelding van de 2D tekening", type=["pdf", "png", "jpg", "jpeg"])
+# Bestand uploaden vanaf laptop of foto maken via telefoon
+uploaded_file = st.file_uploader("📂 Sleep hier een afbeelding (PNG/JPG) of PDF van de 2D tekening", type=["pdf", "png", "jpg", "jpeg"])
 camera_foto = st.camera_input("📸 Of maak direct een foto met de camera")
 
-if uploaded_file is not None:
-    st.success(f"Bestand '{uploaded_file.name}' succesvol geüpload!")
-elif camera_foto is not None:
-    st.success("Foto succesvol gemaakt via camera!")
+# Bepaal welk bestand wordt gebruikt (upload of camera)
+actief_bestand = uploaded_file if uploaded_file is not None else camera_foto
+
+if actief_bestand is not None:
+    # Als het een afbeelding is (geen PDF), laat hem direct op het scherm zien!
+    if hasattr(actief_bestand, "name") and actief_bestand.name.lower().endswith(('.png', '.jpg', '.jpeg')):
+        st.image(actief_bestand, caption="Geüploade Tekening / Product", use_container_width=True)
+    elif camera_foto is not None:
+        st.image(camera_foto, caption="Gemaakte Foto", use_container_width=True)
+    else:
+        st.info(f"PDF-bestand '{uploaded_file.name}' succesvol geüpload.")
 
 st.markdown("---")
 st.subheader("1. Netto Productmaten (van de tekening)")
@@ -41,7 +48,7 @@ vlak_z = st.number_input("Vlakmarge bovenzijde (mm)", value=1.5, step=0.5,
 
 st.markdown("---")
 
-# Berekeningsknop toegevoegd!
+# Berekeningsknop
 if st.button("🚀 Bereken Uitgangsmateriaal", type="primary"):
     # Berekeningen uitvoeren
     bruto_l = netto_l + (2 * omtrek_xy)
