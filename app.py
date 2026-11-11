@@ -4,10 +4,10 @@ import fitz  # PyMuPDF
 import cv2
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="CNC Materiaal Calculator & 3D Contour Viewer", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="CNC Materiaal Calculator & Volledig 3D Model", page_icon="⚙️", layout="wide")
 
-st.title("⚙️ CNC Uitgangsmateriaal & 3D Contour-Viewer")
-st.write("Sleep je PDF-tekening in de app. De app detecteert de buitenlijnen en toont het 3D-product in het ruwe materiaal.")
+st.title("⚙️ CNC Uitgangsmateriaal & Volledige 3D Product-Viewer")
+st.write("De app leest nu zowel de buitenlijnen als de interne contouren (gaten/pockets) uit je tekening voor een compleet 3D-model.")
 
 col_links, col_rechts = st.columns([1.3, 1])
 
@@ -15,8 +15,8 @@ netto_l_default = 150.0
 netto_b_default = 105.0
 netto_d_default = 36.0
 
-# Opslag voor gedetecteerde contour punten
-contour_punten = None
+# Opslag voor gedetecteerde contouren (buiten + binnen)
+alle_contouren = []
 
 with col_links:
     st.subheader("📂 2D Tekening / PDF")
@@ -32,7 +32,6 @@ with col_links:
                 pix = page.get_pixmap(dpi=150)
                 st.image(pix.tobytes("png"), caption=f"PDF: {uploaded_file.name}", use_container_width=True)
                 
-                # Omzetten naar OpenCV formaat voor contour-detectie
                 img_np = np.frombuffer(pix.samples, dtype=np.uint8).reshape(pix.h, pix.w, pix.n)
                 if pix.n == 4:
                     img_array = cv2.cvtColor(img_np, cv2.COLOR_RGBA2GRAY)
@@ -43,18 +42,19 @@ with col_links:
                 img_array = cv2.imdecode(file_bytes, cv2.IMREAD_GRAYSCALE)
                 st.image(uploaded_file, caption="Geüploade afbeelding", use_container_width=True)
 
-            # Automatische contour (buitenlijn) detectie via OpenCV
+            # Detecteer alle contouren (inclusief gaten/interne elementen via RETR_TREE)
             if img_array is not None:
                 _, thresh = cv2.threshold(img_array, 200, 255, cv2.THRESH_BINARY_INV)
-                contours, _ = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                
                 if contours:
-                    # Pak de grootste contour (het product)
-                    grootste_contour = max(contours, key=cv2.contourArea)
-                    # Vereenvoudig de contour een beetje voor strakke 3D lijnen
-                    epsilon = 0.015 * cv2.arcLength(grootste_contour, True)
-                    approx = cv2.approxPolyDP(grootste_contour, epsilon, True)
-                    if len(approx) >= 3:
-                        contour_punten = approx.squeeze()
+                    for cnt in contours:
+                        # Filter te kleine ruis weg
+                        if cv2.contourArea(cnt) > 50:
+                            epsilon = 0.015 * cv2.arcLength(cnt, True)
+                            approx = cv2.approxPolyDP(cnt, epsilon, True)
+                            if len(approx) >= 3:
+                                alle_contouren.append(approx.squeeze())
 
         except Exception as e:
             st.error(f"Fout bij verwerken tekening: {e}")
@@ -80,14 +80,14 @@ bruto_dopspan = netto_d + klem_z + vlak_z
 st.subheader("📋 Advies Uitgangsmateriaal")
 st.info(f"**Minimale Bruto Blokmaat:** {bruto_l:.1f} x {bruto_b:.1f} x **{bruto_dopspan:.1f} mm** (incl. {klem_z} mm klemvlees)")
 
-# --- 3D VISUALISATIE MET CONTOUR EXTRUSIE ---
-st.subheader("🧊 3D Visualisatie: Product-contour in Bruto Blok")
+# --- 3D VISUALISATIE MET ALLE CONTOUREN (BUITEN + BINNEN) ---
+st.subheader("🧊 3D Visualisatie: Compleet Product in Bruto Blok")
 
 c1, c2 = st.columns(2)
 with c1:
     toon_bruto = st.checkbox("Toon Bruto Uitgangsmateriaal (Doorzichtig)", value=True)
 with c2:
-    toon_netto = st.checkbox("Toon Netto Product Contour (3D Gextrudeerd)", value=True)
+    toon_netto = st.checkbox("Toon Volledig Product Model", value=True)
 
 fig = go.Figure()
 
@@ -106,36 +106,38 @@ if toon_bruto:
         name='Bruto Uitgangsmateriaal'
     ))
 
-# 2. Netto product (op basis van gedetecteerde contour of fallback rechthoek)
+# 2. Volledig product (met alle gedetecteerde contouren)
 if toon_netto:
-    if contour_punten is not None and len(contour_punten) > 2:
-        # Normaliseer en schaal gedetecteerde contour naar de netto maten van de gebruiker
-        pts = contour_punten.astype(float)
-        min_x, min_y = np.min(pts, axis=0)
-        max_x, max_y = np.max(pts, axis=0)
-        
-        # Schaal naar mm binnen de netto afmetingen, gecentreerd met omtrek_xy
-        range_x = max_x - min_x if max_x != min_x else 1.0
-        range_y = max_y - min_y if max_y != min_y else 1.0
-        
-        scaled_x = omtrek_xy + (pts[:, 0] - min_x) / range_x * netto_l
-        scaled_y = omtrek_xy + (pts[:, 1] - min_y) / range_y * netto_b
-        
-        n_pts = len(scaled_x)
-        # Maak 3D extrusie mesh (onderkant op klem_z, bovenkant op klem_z + netto_d)
-        x_mesh = np.concatenate([scaled_x, scaled_x])
-        y_mesh = np.concatenate([scaled_y, scaled_y])
-        z_mesh = np.concatenate([np.full(n_pts, klem_z), np.full(n_pts, klem_z + netto_d)])
-        
-        fig.add_trace(go.Mesh3d(
-            x=x_mesh, y=y_mesh, z=z_mesh,
-            alphahull=0,
-            color='orange',
-            opacity=0.85,
-            name='Netto Product (Gedetecteerd Vorm)'
-        ))
+    if alle_contouren:
+        # Pak alle gevonden contouren en schaal ze in de 3D ruimte
+        for idx, pts in enumerate(alle_contouren):
+            if len(pts.shape) == 2 and len(pts) >= 3:
+                min_x, min_y = np.min(pts, axis=0)
+                max_x, max_y = np.max(pts, axis=0)
+                
+                range_x = max_x - min_x if max_x != min_x else 1.0
+                range_y = max_y - min_y if max_y != min_y else 1.0
+                
+                scaled_x = omtrek_xy + (pts[:, 0] - min_x) / range_x * netto_l
+                scaled_y = omtrek_xy + (pts[:, 1] - min_y) / range_y * netto_b
+                
+                n_pts = len(scaled_x)
+                x_mesh = np.concatenate([scaled_x, scaled_x])
+                y_mesh = np.concatenate([scaled_y, scaled_y])
+                z_mesh = np.concatenate([np.full(n_pts, klem_z), np.full(n_pts, klem_z + netto_d)])
+                
+                # De buitenste contour is vaak de grootste, die maken we oranje. Interne vormen krijgen een andere kleur of accent.
+                kleur = 'orange' if idx == 0 else 'darkorange'
+                
+                fig.add_trace(go.Mesh3d(
+                    x=x_mesh, y=y_mesh, z=z_mesh,
+                    alphahull=0,
+                    color=kleur,
+                    opacity=0.85,
+                    name=f'Product Deel {idx+1}'
+                ))
     else:
-        # Fallback naar rechthoekig blok als er geen contour gevonden is
+        # Fallback als er geen contouren gedetecteerd zijn
         px0, py0, pz0 = omtrek_xy, omtrek_xy, klem_z
         px1, py1, pz1 = omtrek_xy + netto_l, omtrek_xy + netto_b, klem_z + netto_d
         fig.add_trace(go.Mesh3d(
@@ -147,7 +149,7 @@ if toon_netto:
             k=[0, 7, 2, 3, 6, 2, 1, 5, 1, 5, 2, 7],
             color='orange',
             opacity=0.85,
-            name='Netto Product (Rechthoek)'
+            name='Netto Product (Standaard)'
         ))
 
 # Layout instellingen
