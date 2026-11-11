@@ -2,3 +2,4 @@ streamlit
 numpy
 PyMuPDF
 plotly
+opencv-python-headless
