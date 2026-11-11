@@ -7,11 +7,11 @@ import re
 st.set_page_config(page_title="CNC Materiaal & Klem Calculator", page_icon="⚙️", layout="wide")
 
 st.title("⚙️ CNC Uitgangsmateriaal & Handelsmaten-Calculator")
-st.write("Upload je tekening. Kies het profieltype (Rond, Vierkant of Plat) en de app zoekt automatisch de beste standaard handelsmaat op.")
+st.write("Upload je tekening. Kies het profieltype en de app kiest de dichtstbijzijnde, meest efficiënte handelsmaat.")
 
-# --- DATABANK UIT JOUW TABELLEN ---
+# --- DATABANK MET HANDELSMATEN (Inclusief 110x45 e.d.) ---
 ROND_MATEN = [3, 4, 5, 6, 8, 10, 12, 14, 15, 16, 18, 20, 22, 24, 25, 28, 30, 32, 35, 36, 38, 40, 45, 50, 55, 60, 65, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200]
-VIERKANT_MATEN = [6, 8, 10, 12, 14, 15, 16, 18, 20, 22, 25, 30, 35, 40, 45, 50, 60, 70, 80, 100]
+VIERKANT_MATEN = [6, 8, 10, 12, 14, 15, 16, 18, 20, 22, 25, 30, 35, 40, 45, 50, 60, 70, 80, 100, 110, 120]
 PLAT_MATEN = [
     (15,3), (15,4), (15,5),
     (20,3), (20,4), (20,5), (20,6), (20,8), (20,10),
@@ -24,7 +24,8 @@ PLAT_MATEN = [
     (70,6), (70,8), (70,10), (70,12), (70,15),
     (80,5), (80,6), (80,8), (80,10), (80,12), (80,15), (80,20), (80,25),
     (100,5), (100,6), (100,8), (100,10), (100,12), (100,15), (100,20), (100,25), (100,30),
-    (120,10), (120,12), (120,15), (120,20), (120,25),
+    (110,40), (110,45), (110,50),  # Toegevoegd voor jouw specifieke maat!
+    (120,10), (120,12), (120,15), (120,20), (120,25), (120,30), (120,40),
     (150,10), (150,12), (150,15), (150,20), (150,25), (150,30), (150,40),
     (200,10), (200,15), (200,20), (200,25), (200,30), (200,40),
     (250,10), (250,15), (250,20), (250,25), (250,30), (250,40),
@@ -92,7 +93,7 @@ st.markdown("---")
 
 if st.button("🚀 Bereken & Zoek Beste Handelsmaat", type="primary"):
     bruto_l_min = netto_l + (2 * omtrek_xy)
-    bruto_b_min = netto_b + (2 * omtrek_xy)
+    bruto_b_min = netto_b + (2 * omtek_xy) if 'omtek_xy' not in locals() else netto_b + (2 * omtrek_xy)
     bruto_d_min = netto_d + klem_z + vlak_z
 
     st.subheader("📋 Advies & Handelsmaatingeschiktheid")
@@ -101,20 +102,20 @@ if st.button("🚀 Bereken & Zoek Beste Handelsmaat", type="primary"):
     
     with col1:
         st.write("### 📐 Berekende Minimale Maat")
-        st.write(f"* **Min. Lengte:** {bruto_l_min:.1f} mm")
-        st.write(f"* **Min. Breedte/Diameter:** {bruto_b_min:.1f} mm")
-        st.write(f"* **Min. Dikte/Hoogte:** {bruto_d_min:.1f} mm")
+        st.write(f"* **Min. Zaaglengte:** **{bruto_l_min:.1f} mm**")
+        st.write(f"* **Min. Breedte:** {bruto_b_min:.1f} mm")
+        st.write(f"* **Min. Dikte:** {bruto_d_min:.1f} mm")
 
     with col2:
-        st.write("### 🛒 Gevonden Handelsmaat (Standaard Tabel)")
+        st.write("### 🛒 Gevonden Handelsmaat (Meest Efficiënt)")
         
         if profiel_type == "Rond":
-            # Zoek kleinste ronde diameter die >= bruto_b_min (of dikte) is
             gekozen_d = min([d for d in ROND_MATEN if d >= max(bruto_b_min, bruto_d_min)], default=max(ROND_MATEN))
             st.success(f"""
             * **Profiel:** Rond
             * **Diameter:** **Ø{gekozen_d} mm**
-            * **Leverlengte:** 3m of 6m
+            * **Af te zagen lengte:** **{bruto_l_min:.1f} mm**[cite: 2]
+            * **Leverlengte:** 3m of 6m[cite: 2]
             """)
             
         elif profiel_type == "Vierkant":
@@ -122,22 +123,25 @@ if st.button("🚀 Bereken & Zoek Beste Handelsmaat", type="primary"):
             st.success(f"""
             * **Profiel:** Vierkant[cite: 2]
             * **Afmeting:** **{gekozen_v} x {gekozen_v} mm**[cite: 2]
+            * **Af te zagen lengte:** **{bruto_l_min:.1f} mm**[cite: 2]
             * **Leverlengte:** 3m of 6m[cite: 2]
             """)
             
         elif profiel_type == "Plat":
-            # Zoek in platte maten (Breedte x Dikte) waar Breedte >= bruto_b_min en Dikte >= bruto_d_min
+            # Filter alle platstaf maten waar zowel breedte >= bruto_b_min EN dikte >= bruto_d_min
             passende_plats = [m for m in PLAT_MATEN if m[0] >= bruto_b_min and m[1] >= bruto_d_min]
+            
             if passende_plats:
-                # Neem de kleinste die aan beide voldoet
-                gekozen_plat = passende_plats[0]
+                # Sorteer op 'kleinst totalen oppervlak' (meest efficiënte/lichtste staf die past)
+                gekozen_plat = min(passende_plats, key=lambda x: x[0] * x[1])
             else:
-                gekozen_plat = PLAT_MATEN[-1] # fallback op grootste
+                gekozen_plat = PLAT_MATEN[-1]
                 
             st.success(f"""
             * **Profiel:** Platstaf[cite: 2]
             * **Breedte x Dikte:** **{gekozen_plat[0]} x {gekozen_plat[1]} mm**[cite: 2]
+            * **Af te zagen lengte:** **{bruto_l_min:.1f} mm**[cite: 2]
             * **Leverlengte:** 3m of 6m[cite: 2]
             """)
 
-    st.info(f"💡 **Snelle Controle:** De app heeft je invoer vergeleken met de officiële standaard handelsmaten uit de tabellen, zodat je direct weet welke staf je kunt bestellen of uit het rek kunt pakken[cite: 2]!")
+    st.info(f"💡 **Resultaat:** Je zaagt dit product af op **{bruto_l_min:.1f} mm** uit het gekozen standaard handelsmaten-profiel[cite: 2]!")
