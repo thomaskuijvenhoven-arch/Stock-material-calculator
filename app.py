@@ -4,13 +4,16 @@ import numpy as np
 st.set_page_config(page_title="CNC Materiaal Calculator", page_icon="⚙️", layout="centered")
 
 st.title("⚙️ CNC Uitgangsmateriaal & Klem-Calculator")
-st.write("Maak een foto van de 2D-tekening en bereken direct de minimale brutomaat en opspanmarge.")
+st.write("Sleep een 2D-tekening (PDF of afbeelding) hierheen of maak direct een foto met je telefoon.")
 
-# 1. Camera input voor de telefoon of webcam
-camera_foto = st.camera_input("📸 Maak een foto van de 2D tekening")
+# 1. Bestand uploaden (voor PDF's / afbeeldingen vanaf de laptop) én Camera optie
+uploaded_file = st.file_uploader("📂 Sleep hier een PDF of afbeelding van de 2D tekening", type=["pdf", "png", "jpg", "jpeg"])
+camera_foto = st.camera_input("📸 Of maak direct een foto met de camera")
 
-if camera_foto is not None:
-    st.success("Foto succesvol gemaakt!")
+if uploaded_file is not None:
+    st.success(f"Bestand '{uploaded_file.name}' succesvol geüpload!")
+elif camera_foto is not None:
+    st.success("Foto succesvol gemaakt via camera!")
 
 st.markdown("---")
 st.subheader("1. Netto Productmaten (van de tekening)")
