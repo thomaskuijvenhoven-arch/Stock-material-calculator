@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="CNC Materiaal Calculator & 3D Viewer", page_icon="⚙️", layout="wide")
 
 st.title("⚙️ CNC Uitgangsmateriaal & 3D Opspan-Viewer")
-st.write("Sleep je PDF-tekening in de app. De maten worden ingevuld en het doorzichtige ruwe materiaal wordt in 3D getoond.")
+st.write("Sleep je PDF-tekening in de app. Bekijk het doorzichtige ruwe materiaal en het netto product in 3D.")
 
 col_links, col_rechts = st.columns([1.2, 1])
 
@@ -52,42 +52,49 @@ bruto_dopspan = netto_d + klem_z + vlak_z
 st.subheader("📋 Advies Uitgangsmateriaal")
 st.info(f"**Minimale Bruto Blokmaat:** {bruto_l:.1f} x {bruto_b:.1f} x **{bruto_dopspan:.1f} mm** (incl. {klem_z} mm klemvlees)")
 
-# --- 3D VISUALISATIE (Doorzichtig ruw materiaal + product erin) ---
-st.subheader("🧊 3D Visualisatie: Product in Doorzichtig Uitgangsmateriaal")
+# --- 3D VISUALISATIE MET CHECKBOXEN ---
+st.subheader("🧊 3D Visualisatie")
+
+# Twee kolommen voor de check-boxen
+c1, c2 = st.columns(2)
+with c1:
+    toon_bruto = st.checkbox("Toon Bruto Uitgangsmateriaal (Doorzichtig)", value=True)
+with c2:
+    toon_netto = st.checkbox("Toon Netto Product (Solide)", value=True)
 
 fig = go.Figure()
 
-# 1. Het doorzichtige bruto blok (uitgangsmateriaal)
-# Coördinaten voor een kubus/blok
-bx, by, bz = bruto_l, bruto_b, bruto_dopspan
-fig.add_trace(go.Mesh3d(
-    x=[0, bx, bx, 0, 0, bx, bx, 0],
-    y=[0, 0, by, by, 0, 0, by, by],
-    z=[0, 0, 0, 0, bz, bz, bz, bz],
-    i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
-    j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
-    k=[0, 7, 2, 3, 6, 2, 1, 5, 1, 5, 2, 7],
-    color='lightblue',
-    opacity=0.25, # Maakt het blok doorzichtig!
-    name='Bruto Uitgangsmateriaal'
-))
+# 1. Het doorzichtige bruto blok (alleen tekenen als checkbox aan staat)
+if toon_bruto:
+    bx, by, bz = bruto_l, bruto_b, bruto_dopspan
+    fig.add_trace(go.Mesh3d(
+        x=[0, bx, bx, 0, 0, bx, bx, 0],
+        y=[0, 0, by, by, 0, 0, by, by],
+        z=[0, 0, 0, 0, bz, bz, bz, bz],
+        i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+        j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+        k=[0, 7, 2, 3, 6, 2, 1, 5, 1, 5, 2, 7],
+        color='lightblue',
+        opacity=0.25, # Doorzichtig
+        name='Bruto Uitgangsmateriaal'
+    ))
 
-# 2. Het netto product erin gepositioneerd (rekening houdend met marges)
-# Het product begint op X = omtrek_xy, Y = omtrek_xy, en Z = klem_z
-px0, py0, pz0 = omtrek_xy, omtrek_xy, klem_z
-px1, py1, pz1 = omtrek_xy + netto_l, omtrek_xy + netto_b, klem_z + netto_d
+# 2. Het netto product erin gepositioneerd (alleen tekenen als checkbox aan staat)
+if toon_netto:
+    px0, py0, pz0 = omtrek_xy, omtrek_xy, klem_z
+    px1, py1, pz1 = omtrek_xy + netto_l, omtrek_xy + netto_b, klem_z + netto_d
 
-fig.add_trace(go.Mesh3d(
-    x=[px0, px1, px1, px0, px0, px1, px1, px0],
-    y=[py0, py0, py1, py1, py0, py0, py1, py1],
-    z=[pz0, pz0, pz0, pz0, pz1, pz1, pz1, pz1],
-    i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
-    j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
-    k=[0, 7, 2, 3, 6, 2, 1, 5, 1, 5, 2, 7],
-    color='orange',
-    opacity=0.85, # Solide product zichtbaar binnenin
-    name='Netto Product'
-))
+    fig.add_trace(go.Mesh3d(
+        x=[px0, px1, px1, px0, px0, px1, px1, px0],
+        y=[py0, py0, py1, py1, py0, py0, py1, py1],
+        z=[pz0, pz0, pz0, pz0, pz1, pz1, pz1, pz1],
+        i=[7, 0, 0, 0, 4, 4, 6, 6, 4, 0, 3, 2],
+        j=[3, 4, 1, 2, 5, 6, 5, 2, 0, 1, 6, 3],
+        k=[0, 7, 2, 3, 6, 2, 1, 5, 1, 5, 2, 7],
+        color='orange',
+        opacity=0.85, # Solide oranje product
+        name='Netto Product'
+    ))
 
 # Layout instellingen voor de 3D-viewer
 fig.update_layout(
